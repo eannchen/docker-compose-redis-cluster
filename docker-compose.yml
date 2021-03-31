@@ -1,5 +1,8 @@
 version: '3.4'
 
+# The minimal cluster that works as expected requires to contain at least three master nodes.
+# For your first tests it is strongly suggested to start a six nodes cluster with three masters and three slaves.
+
 services:
   redis-node1:
     build:
@@ -8,6 +11,8 @@ services:
       - "7000:7000"
       - "17000:17000"
     restart: always
+    # The cluster will be configured and joined, which means,
+    # instances will be bootstrapped into talking with each other.
     entrypoint: [redis-server, /etc/redis/rediscluster.conf,    --port,"7000", --cluster-announce-ip,"${ip}"]
   redis-node2:
     build:
@@ -63,6 +68,7 @@ services:
       - redis-node3
   redis-cluster-creator:
     image: redis:6.0.3
+    # The option --replicas 1 means that we want a slave for every master created.
     entrypoint: [/bin/sh,-c,'echo "yes" | redis-cli -a pass.123 --cluster create ${ip}:7000 ${ip}:7001 ${ip}:7002 ${ip}:7003 ${ip}:7004 ${ip}:7005 --cluster-replicas 1']
     depends_on:
       - redis-node1
@@ -71,3 +77,14 @@ services:
       - redis-node4
       - redis-node5
       - redis-node6
+
+  # The redis-cli cluster support is very basic so it always uses the fact that Redis Cluster nodes are able to redirect a client to the right node.
+  # A serious client is able to do better than that, and cache the map between hash slots and nodes addresses,
+  # to directly use the right connection to the right node.
+  # The map is refreshed only when something changed in the cluster configuration,
+  # for example after a failover or after the system administrator changed the cluster layout by adding or removing nodes.
+  redis-cli:
+    image: redis:6.0.3
+    depends_on:
+      - redis-cluster-creator
+    command: redis-cli -c -h redis-node1 -a pass.123 -p 7000
